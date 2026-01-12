@@ -1,57 +1,69 @@
 import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
-const CACHE_KEY = 'dale_jogos_cache_v2';
-const CACHE_TIME = 120 * 60 * 1000; // 2 horas de cache para proteger a cota
+const CACHE_KEY = 'dale_jogos_v3_cache';
+const CACHE_TIME = 12 * 60 * 60 * 1000; // 12 horas de cache
 
-// Dados de demonstração caso a API esteja bloqueada por limite de cota
 const OFFLINE_DATA: MatchDataResponse = {
   matches: [
     {
-      id: "offline-1",
-      homeTeam: "Palmeiras",
-      awayTeam: "Corinthians",
+      id: "off-1",
+      homeTeam: "Corinthians",
+      awayTeam: "Palmeiras",
       league: "Campeonato Paulista",
-      dateTime: new Date(Date.now() + 86400000 * 2).toISOString(),
+      dateTime: new Date(Date.now() + 86400000 * 1).toISOString(),
       status: "SCHEDULED",
-      venue: "Allianz Parque"
+      venue: "Neo Química Arena"
     },
     {
-      id: "offline-2",
+      id: "off-2",
       homeTeam: "São Paulo",
-      awayTeam: "Santos",
-      league: "Série A",
-      dateTime: new Date(Date.now() + 86400000 * 5).toISOString(),
+      awayTeam: "RB Bragantino",
+      league: "Campeonato Paulista",
+      dateTime: new Date(Date.now() + 86400000 * 2).toISOString(),
       status: "SCHEDULED",
       venue: "MorumBIS"
     },
     {
-      id: "offline-3",
-      homeTeam: "Brasil",
-      awayTeam: "Argentina",
-      league: "Eliminatórias",
-      dateTime: new Date(Date.now() + 86400000 * 10).toISOString(),
+      id: "off-3",
+      homeTeam: "Santos",
+      awayTeam: "Mirassol",
+      league: "Paulistão Série A2",
+      dateTime: new Date(Date.now() + 86400000 * 3).toISOString(),
       status: "SCHEDULED",
-      venue: "Maracanã"
+      venue: "Vila Belmiro"
+    },
+    {
+      id: "off-4",
+      homeTeam: "Brasil",
+      awayTeam: "Colômbia",
+      league: "Eliminatórias",
+      dateTime: new Date(Date.now() + 86400000 * 15).toISOString(),
+      status: "SCHEDULED",
+      venue: "Arena Fonte Nova"
+    },
+    {
+      id: "off-5",
+      homeTeam: "Ponte Preta",
+      awayTeam: "Guarani",
+      league: "Série B",
+      dateTime: new Date(Date.now() + 86400000 * 5).toISOString(),
+      status: "SCHEDULED",
+      venue: "Moisés Lucarelli"
     }
   ],
   sources: [
-    { title: "Dados de Contingência (Modo Offline)", uri: "#" }
+    { title: "Modo de Demonstração (Dados Locais)", uri: "#" }
   ]
 };
 
 export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchDataResponse & { dataSource: 'api' | 'cache' | 'offline' }> => {
-  // 1. Verificar Cache primeiro (se não for atualização forçada)
   if (!forceRefresh) {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
-      try {
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_TIME) {
-          return { ...data, dataSource: 'cache' };
-        }
-      } catch (e) {
-        localStorage.removeItem(CACHE_KEY);
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TIME) {
+        return { ...data, dataSource: 'cache' };
       }
     }
   }
@@ -63,40 +75,26 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchD
 
   const ai = new GoogleGenAI({ apiKey });
 
-  const prompt = `
-    Encontre os próximos jogos (próximos 60 dias) de: Corinthians, Palmeiras, São Paulo, Santos, RB Bragantino e Seleção Brasileira.
-    Retorne APENAS o JSON no formato:
-    {
-      "matches": [
-        {
-          "id": "slug",
-          "homeTeam": "Time",
-          "awayTeam": "Time",
-          "league": "Competição",
-          "dateTime": "ISOString",
-          "status": "SCHEDULED",
-          "venue": "Estádio"
-        }
-      ]
-    }
-  `;
-
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: "Liste 6 próximos jogos de Corinthians, Palmeiras, SPFC, Santos e Seleção Brasileira em 2024/2025. Retorne APENAS um JSON com array 'matches' contendo: id, homeTeam, awayTeam, league, dateTime (ISO), status, venue.",
       config: {
         tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json"
       },
     });
 
     const text = response.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    
     let matches: Match[] = [];
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+    
+    try {
+      const parsed = JSON.parse(text);
       matches = parsed.matches || [];
+    } catch (e) {
+      console.error("Erro ao parsear JSON da API");
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) matches = JSON.parse(jsonMatch[0]).matches || [];
     }
 
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -108,26 +106,16 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchD
       }));
 
     const result = { matches, sources };
-    
-    // Salvar sucesso no cache
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      data: result,
-      timestamp: Date.now()
-    }));
-
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
     return { ...result, dataSource: 'api' };
 
   } catch (error: any) {
-    console.error("Erro na API Gemini:", error);
-    
-    // Se falhar (especialmente erro 429), tenta o cache mesmo que antigo
+    console.warn("API 429 ou erro de rede. Usando fallback.");
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       const { data } = JSON.parse(cached);
       return { ...data, dataSource: 'cache' };
     }
-
-    // Se nem cache tiver, retorna dados offline para não quebrar a UI
     return { ...OFFLINE_DATA, dataSource: 'offline' };
   }
 };
