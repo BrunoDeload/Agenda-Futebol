@@ -1,11 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
-export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
+const CACHE_KEY = 'dale_jogos_cache';
+const CACHE_TIME = 30 * 60 * 1000; // 30 minutos
+
+export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchDataResponse & { fromCache?: boolean }> => {
+  // 1. Verificar Cache
+  if (!forceRefresh) {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TIME) {
+        return { ...data, fromCache: true };
+      }
+    }
+  }
+
   const apiKey = process.env.API_KEY;
-  
   if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY não encontrada. Verifique as 'Environment Variables' no painel do Netlify.");
+    throw new Error("API_KEY não encontrada no Netlify.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -14,8 +27,7 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
     Encontre os próximos jogos de futebol (próximos 90 dias) dos seguintes times paulistas: 
     Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Guarani, Ponte Preta, Mirassol, Novorizontino, Ituano e Botafogo-SP.
     Inclua também jogos da Seleção Brasileira Masculina Principal.
-    
-    Considere competições oficiais: Brasileirão (Série A e B), Copa do Brasil, Libertadores, Sul-Americana e Eliminatórias da Copa.
+    Retorne apenas jogos de competições oficiais.
     
     Retorne os dados EXATAMENTE neste formato JSON:
     {
@@ -67,10 +79,24 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
       }
     }
 
-    return { matches, sources };
+    const result = { matches, sources };
+    
+    // 2. Salvar no Cache
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      data: result,
+      timestamp: Date.now()
+    }));
+
+    return { ...result, fromCache: false };
   } catch (error: any) {
     if (error.message?.includes("429")) {
-      throw new Error("LIMITE DA API ATINGIDO (Erro 429). A chave configurada no Netlify excedeu a cota gratuita do Google AI Studio.");
+      // Se der erro 429 mas tivermos cache (mesmo que antigo), vamos retornar o antigo em vez do erro
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        return { ...data, fromCache: true };
+      }
+      throw new Error("LIMITE DA API EXCEDIDO. Tente novamente em 2 minutos.");
     }
     throw error;
   }
