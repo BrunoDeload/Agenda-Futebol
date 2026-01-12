@@ -3,34 +3,38 @@ import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
 export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
-  // Initialize AI inside the function to ensure it picks up the latest process.env
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("API_KEY não configurada. Adicione a variável de ambiente no Netlify.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
+    Aja como um especialista em futebol brasileiro.
     Encontre os próximos jogos de futebol envolvendo:
-    1. EXCLUSIVAMENTE os principais times PAULISTAS das Séries A e B: Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Ituano, Guarani, Ponte Preta, Novorizontino, Mirassol, Botafogo-SP.
+    1. EXCLUSIVAMENTE os principais times PAULISTAS: Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Ituano, Guarani, Ponte Preta, Novorizontino, Mirassol, Botafogo-SP.
     2. A SELEÇÃO BRASILEIRA (Principal masculina).
     
-    Considere competições como Brasileirão (Série A e B), Copa do Brasil, Libertadores, Sul-Americana, Eliminatórias da Copa e Amistosos.
+    Considere competições como Brasileirão (Série A e B), Copa do Brasil, Libertadores, Sul-Americana e Eliminatórias.
     
-    REGRAS CRÍTICAS: 
-    - Busque apenas jogos AGENDADOS para os próximos 90 dias (3 meses).
-    - IGNORE COMPLETAMENTE o Campeonato Paulista SÉRIE A2.
-    - NÃO inclua placares, apenas a data, hora, times e local.
-    - O campo 'dateTime' DEVE estar no formato ISO 8601 (ex: 2024-05-20T20:00:00Z).
-    - O campo 'status' deve ser sempre 'SCHEDULED'.
+    REGRAS: 
+    - Busque jogos agendados para os próximos 90 dias.
+    - Ignore Paulistão A2.
+    - O campo 'dateTime' deve estar no formato ISO 8601 UTC.
     
-    RETORNE APENAS UM JSON PURO seguindo exatamente esta estrutura:
+    RETORNE APENAS JSON:
     {
       "matches": [
         {
-          "id": "string-unica",
-          "homeTeam": "Nome do Time",
-          "awayTeam": "Nome do Time",
-          "league": "Nome da Competição",
-          "dateTime": "2025-MM-DDTHH:mm:00Z",
+          "id": "string",
+          "homeTeam": "string",
+          "awayTeam": "string",
+          "league": "string",
+          "dateTime": "ISO_DATE_STRING",
           "status": "SCHEDULED",
-          "venue": "Estádio"
+          "venue": "string"
         }
       ]
     }
@@ -68,7 +72,7 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
           status: 'SCHEDULED'
         }));
       } catch (e) {
-        console.error("Gemini JSON parse error:", e);
+        console.error("Erro ao processar JSON do Gemini:", e);
       }
     }
 
@@ -77,7 +81,7 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
       sources: sources
     };
   } catch (error) {
-    console.error("Fatal fetch error in geminiService:", error);
+    console.error("Erro na busca de jogos via Gemini:", error);
     throw error;
   }
 };
