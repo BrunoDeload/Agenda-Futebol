@@ -2,39 +2,35 @@ import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
 export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
-  // O Vite injeta process.env.API_KEY conforme definido no vite.config.ts
+  // Tenta pegar a chave do ambiente injetado pelo Vite
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY não encontrada. Certifique-se de configurar a variável de ambiente API_KEY no painel da Netlify.");
+  // Verifica se a chave é válida (não nula, não undefined e não a string "undefined")
+  if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
+    console.error("Erro Crítico: API_KEY não detectada no ambiente.");
+    throw new Error("API_KEY ausente. Vá ao painel do Netlify > Site Settings > Environment Variables e adicione a chave 'API_KEY'.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
-    Aja como um especialista em futebol brasileiro.
-    Encontre os próximos jogos de futebol envolvendo:
-    1. EXCLUSIVAMENTE os principais times PAULISTAS: Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Ituano, Guarani, Ponte Preta, Novorizontino, Mirassol, Botafogo-SP.
-    2. A SELEÇÃO BRASILEIRA (Principal masculina).
+    Encontre os próximos jogos de futebol (próximos 90 dias) dos seguintes times paulistas: 
+    Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Guarani, Ponte Preta, Mirassol, Novorizontino, Ituano e Botafogo-SP.
+    Inclua também jogos da Seleção Brasileira Masculina Principal.
     
-    Considere competições como Brasileirão (Série A e B), Copa do Brasil, Libertadores, Sul-Americana e Eliminatórias.
+    Considere competições oficiais: Brasileirão (Série A e B), Copa do Brasil, Libertadores, Sul-Americana e Eliminatórias da Copa.
     
-    REGRAS: 
-    - Busque jogos agendados para os próximos 90 dias.
-    - Ignore Paulistão A2.
-    - O campo 'dateTime' deve estar no formato ISO 8601 UTC (ex: 2024-05-20T20:00:00Z).
-    
-    RETORNE APENAS JSON PURO:
+    Retorne os dados EXATAMENTE neste formato JSON:
     {
       "matches": [
         {
-          "id": "string",
-          "homeTeam": "string",
-          "awayTeam": "string",
-          "league": "string",
-          "dateTime": "ISO_DATE_STRING",
+          "id": "slug-unico",
+          "homeTeam": "Nome do Time",
+          "awayTeam": "Nome do Time",
+          "league": "Nome da Competição",
+          "dateTime": "YYYY-MM-DDTHH:mm:ssZ",
           "status": "SCHEDULED",
-          "venue": "string"
+          "venue": "Nome do Estádio"
         }
       ]
     }
@@ -50,8 +46,9 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
     });
 
     const text = response.text || "";
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
+    // Extração de fontes de fundamentação (Grounding)
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources: GroundingSource[] = groundingChunks
       .filter((chunk: any) => chunk.web)
       .map((chunk: any) => ({
@@ -59,30 +56,25 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
         uri: chunk.web.uri
       }));
 
+    // Limpeza da resposta para garantir que pegamos apenas o bloco JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    let parsedMatches: Match[] = [];
+    let matches: Match[] = [];
     
     if (jsonMatch) {
       try {
-        const cleanedJson = jsonMatch[0].trim();
-        const parsed = JSON.parse(cleanedJson);
-        parsedMatches = (parsed.matches || []).map((m: any) => ({
+        const parsed = JSON.parse(jsonMatch[0]);
+        matches = (parsed.matches || []).map((m: any) => ({
           ...m,
-          id: m.id || Math.random().toString(36).substr(2, 9),
-          status: 'SCHEDULED'
+          status: m.status || 'SCHEDULED'
         }));
       } catch (e) {
-        console.error("Erro ao converter JSON do Gemini:", e);
+        console.error("Erro ao processar JSON da IA:", e);
       }
     }
 
-    return {
-      matches: parsedMatches,
-      sources: sources
-    };
+    return { matches, sources };
   } catch (error: any) {
-    console.error("Erro na API Gemini:", error);
-    if (error.message?.includes("API_KEY")) throw error;
-    throw new Error("Falha ao buscar jogos. Verifique sua conexão ou a cota da API.");
+    console.error("Erro na chamada Gemini:", error);
+    throw error;
   }
 };
