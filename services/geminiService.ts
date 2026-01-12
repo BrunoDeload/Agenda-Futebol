@@ -2,10 +2,10 @@
 import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
-// The API key is assumed to be provided by the environment
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
 export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
+  // Initialize AI inside the function to ensure it picks up the latest process.env
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
   const prompt = `
     Encontre os próximos jogos de futebol envolvendo:
     1. EXCLUSIVAMENTE os principais times PAULISTAS das Séries A e B: Corinthians, Palmeiras, São Paulo, Santos, Red Bull Bragantino, Ituano, Guarani, Ponte Preta, Novorizontino, Mirassol, Botafogo-SP.
@@ -28,7 +28,7 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
           "homeTeam": "Nome do Time",
           "awayTeam": "Nome do Time",
           "league": "Nome da Competição",
-          "dateTime": "2024-MM-DDTHH:mm:00Z",
+          "dateTime": "2025-MM-DDTHH:mm:00Z",
           "status": "SCHEDULED",
           "venue": "Estádio"
         }
@@ -55,7 +55,6 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
         uri: chunk.web.uri
       }));
 
-    // Improved JSON extraction regex to handle potential markdown or extra text
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     let parsedMatches: Match[] = [];
     
@@ -65,16 +64,12 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
         const parsed = JSON.parse(cleanedJson);
         parsedMatches = (parsed.matches || []).map((m: any) => ({
           ...m,
-          // Ensure ID exists
           id: m.id || Math.random().toString(36).substr(2, 9),
-          // Fallback status
           status: 'SCHEDULED'
         }));
       } catch (e) {
-        console.error("Gemini JSON parse error:", e, "Raw text:", text);
+        console.error("Gemini JSON parse error:", e);
       }
-    } else {
-      console.warn("No JSON found in Gemini response:", text);
     }
 
     return {
