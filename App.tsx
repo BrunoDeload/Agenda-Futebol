@@ -18,8 +18,8 @@ const App: React.FC = () => {
     try {
       const data = await fetchFootballMatches();
       console.log("Dados recebidos:", data);
-      setMatches(data.matches);
-      setSources(data.sources);
+      setMatches(data.matches || []);
+      setSources(data.sources || []);
     } catch (err: any) {
       console.error("Erro ao carregar dados:", err);
       setError(err.message || "Erro desconhecido ao conectar com a API.");
@@ -37,7 +37,6 @@ const App: React.FC = () => {
     return [...matches].sort((a, b) => {
       const dateA = new Date(a.dateTime).getTime();
       const dateB = new Date(b.dateTime).getTime();
-      // Handle invalid dates
       if (isNaN(dateA)) return 1;
       if (isNaN(dateB)) return -1;
       return dateA - dateB;
@@ -45,8 +44,8 @@ const App: React.FC = () => {
   }, [matches]);
 
   return (
-    <div className="min-h-screen pb-20 relative overflow-hidden bg-slate-950 font-sans">
-      {/* Football Field Background Overlay - Refined for better contrast */}
+    <div className="min-h-screen pb-20 relative overflow-hidden bg-slate-950 font-sans text-slate-100">
+      {/* Football Field Background Overlay */}
       <div 
         className="fixed inset-0 z-[-2] pointer-events-none"
         style={{
@@ -59,10 +58,7 @@ const App: React.FC = () => {
       
       {/* Field Lines & Grass Pattern Overlay */}
       <div className="fixed inset-0 z-[-1] opacity-[0.15] pointer-events-none overflow-hidden">
-        {/* Grass Stripes Effect */}
         <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent,transparent_100px,rgba(34,197,94,0.1)_100px,rgba(34,197,94,0.1)_200px)]" />
-        
-        {/* Centered Pitch Markings */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[70vh] border-2 border-white/10 rounded-sm">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-white/10" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-white/10 rounded-full" />
