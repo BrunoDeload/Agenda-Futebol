@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchFootballMatches } from './services/geminiService';
 import { Match, GroundingSource } from './types';
 import MatchCard from './components/MatchCard';
-import { Trophy, AlertCircle, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
+import { Trophy, AlertCircle, ExternalLink, RefreshCw, Loader2, Info } from 'lucide-react';
 
 const App: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -12,17 +11,15 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const loadData = async () => {
-    console.log("Iniciando busca de dados...");
     setLoading(true);
     setError(null);
     try {
       const data = await fetchFootballMatches();
-      console.log("Dados recebidos:", data);
       setMatches(data.matches || []);
       setSources(data.sources || []);
     } catch (err: any) {
-      console.error("Erro ao carregar dados:", err);
-      setError(err.message || "Erro desconhecido ao conectar com a API.");
+      console.error("Erro capturado:", err);
+      setError(err.message || "Erro inesperado ao buscar jogos.");
     } finally {
       setLoading(false);
     }
@@ -37,37 +34,22 @@ const App: React.FC = () => {
     return [...matches].sort((a, b) => {
       const dateA = new Date(a.dateTime).getTime();
       const dateB = new Date(b.dateTime).getTime();
-      if (isNaN(dateA)) return 1;
-      if (isNaN(dateB)) return -1;
-      return dateA - dateB;
+      return (isNaN(dateA) ? Infinity : dateA) - (isNaN(dateB) ? Infinity : dateB);
     });
   }, [matches]);
 
   return (
     <div className="min-h-screen pb-20 relative overflow-hidden bg-slate-950 font-sans text-slate-100">
-      {/* Football Field Background Overlay */}
       <div 
         className="fixed inset-0 z-[-2] pointer-events-none"
         style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.98)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=2070&auto=format&fit=crop')`,
+          backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.98)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=2070&auto=format&fit=crop')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundAttachment: 'fixed'
         }}
       />
       
-      {/* Field Lines & Grass Pattern Overlay */}
-      <div className="fixed inset-0 z-[-1] opacity-[0.15] pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent,transparent_100px,rgba(34,197,94,0.1)_100px,rgba(34,197,94,0.1)_200px)]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[70vh] border-2 border-white/10 rounded-sm">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-white/10" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-white/10 rounded-full" />
-            <div className="absolute top-1/2 left-0 -translate-y-1/2 w-32 h-64 border-2 border-white/10 border-l-0" />
-            <div className="absolute top-1/2 right-0 -translate-y-1/2 w-32 h-64 border-2 border-white/10 border-r-0" />
-        </div>
-      </div>
-
-      {/* Header */}
       <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-xl border-b border-white/5 px-6 py-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex flex-col md:flex-row items-center gap-6">
@@ -95,16 +77,22 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6 py-12">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-8 rounded-2xl flex items-start gap-4 mb-10 backdrop-blur-md shadow-2xl">
-            <AlertCircle className="w-8 h-8 mt-0.5" />
-            <div>
-              <p className="font-black uppercase tracking-tighter text-lg">Erro na Conexão</p>
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-8 rounded-2xl flex flex-col md:flex-row items-start gap-4 mb-10 backdrop-blur-md shadow-2xl">
+            <AlertCircle className="w-8 h-8 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-black uppercase tracking-tighter text-lg">Alerta do Sistema</p>
               <p className="text-sm opacity-90 font-medium mt-1 mb-4">{error}</p>
+              {error.includes("429") && (
+                <div className="flex items-center gap-2 text-xs bg-red-500/20 p-3 rounded-lg border border-red-500/30 mb-4">
+                  <Info className="w-4 h-4" />
+                  <span>Isso significa que o Google limitou seu acesso temporariamente. Tente novamente em alguns minutos.</span>
+                </div>
+              )}
               <button 
                 onClick={loadData}
-                className="bg-red-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase hover:bg-red-600 transition-colors"
+                className="bg-red-500 text-white px-6 py-2 rounded-full text-xs font-bold uppercase hover:bg-red-700 transition-colors shadow-lg"
               >
-                Tentar novamente
+                Tentar reconectar
               </button>
             </div>
           </div>
@@ -120,17 +108,6 @@ const App: React.FC = () => {
               Times Paulistas & Seleção Brasileira (Próximos 3 Meses)
             </p>
           </div>
-          <div className="flex items-center gap-6 bg-slate-900/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/5 shadow-xl">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(255,223,0,0.6)]"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Seleção</span>
-            </div>
-            <div className="w-px h-4 bg-white/10" />
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Paulistas</span>
-            </div>
-          </div>
         </div>
 
         {loading ? (
@@ -143,10 +120,6 @@ const App: React.FC = () => {
                   <div className="h-4 w-8 bg-white/5 rounded"></div>
                   <div className="w-16 h-16 bg-white/5 rounded-2xl"></div>
                 </div>
-                <div className="space-y-3">
-                  <div className="h-3 w-3/4 bg-white/5 rounded"></div>
-                  <div className="h-3 w-1/2 bg-white/5 rounded"></div>
-                </div>
               </div>
             ))}
           </div>
@@ -157,18 +130,12 @@ const App: React.FC = () => {
             ))}
           </div>
         ) : !error && (
-          <div className="text-center py-32 bg-slate-950/60 border border-dashed border-white/10 rounded-[40px] backdrop-blur-md shadow-2xl">
-            <div className="bg-slate-900 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 border border-white/5 shadow-2xl">
-              <Trophy className="w-12 h-12 text-slate-700" />
-            </div>
+          <div className="text-center py-32 bg-slate-950/40 border border-dashed border-white/10 rounded-[40px] backdrop-blur-md">
+            <Trophy className="w-12 h-12 text-slate-700 mx-auto mb-6" />
             <h3 className="text-2xl font-black text-slate-200 uppercase tracking-tight">SEM JOGOS NO MOMENTO</h3>
-            <p className="text-slate-500 mt-4 max-w-sm mx-auto font-medium text-sm px-4">
-              Nenhuma partida encontrada para o critério selecionado nos próximos 90 dias.
-            </p>
           </div>
         )}
 
-        {/* Sources Footer */}
         {!loading && sources.length > 0 && (
           <div className="mt-24 pt-12 border-t border-white/5">
             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 text-center md:text-left">
@@ -181,35 +148,16 @@ const App: React.FC = () => {
                   href={source.uri}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] text-slate-400 hover:text-green-500 font-bold flex items-center gap-2 bg-slate-900/60 px-5 py-3 rounded-2xl border border-white/5 transition-all hover:border-green-500/30 backdrop-blur-sm"
+                  className="text-[11px] text-slate-400 hover:text-green-500 font-bold flex items-center gap-2 bg-slate-900/60 px-5 py-3 rounded-2xl border border-white/5 transition-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  {source.title.length > 35 ? source.title.substring(0, 35) + '...' : source.title}
+                  {source.title}
                 </a>
               ))}
             </div>
           </div>
         )}
       </main>
-
-      {/* Persistent Bottom UI for Mobile */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 bg-slate-950/95 backdrop-blur-3xl border border-white/10 rounded-full px-8 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex items-center gap-12 md:hidden">
-        <button 
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="text-green-500 flex flex-col items-center gap-1 transition-transform active:scale-95"
-        >
-          <Trophy className="w-7 h-7" />
-          <span className="text-[9px] font-black uppercase tracking-tighter">Agenda</span>
-        </button>
-        <button 
-          onClick={loadData}
-          disabled={loading}
-          className="text-slate-400 flex flex-col items-center gap-1 active:scale-95 transition-all disabled:opacity-30"
-        >
-          {loading ? <Loader2 className="w-7 h-7 animate-spin" /> : <RefreshCw className="w-7 h-7" />}
-          <span className="text-[9px] font-black uppercase tracking-tighter">Recarregar</span>
-        </button>
-      </div>
     </div>
   );
 };

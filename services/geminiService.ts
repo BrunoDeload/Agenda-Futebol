@@ -2,13 +2,10 @@ import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
 export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
-  // Tenta pegar a chave do ambiente injetado pelo Vite
   const apiKey = process.env.API_KEY;
   
-  // Verifica se a chave é válida (não nula, não undefined e não a string "undefined")
-  if (!apiKey || apiKey === "undefined" || apiKey.length < 10) {
-    console.error("Erro Crítico: API_KEY não detectada no ambiente.");
-    throw new Error("API_KEY ausente. Vá ao painel do Netlify > Site Settings > Environment Variables e adicione a chave 'API_KEY'.");
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API_KEY não encontrada. Verifique as 'Environment Variables' no painel do Netlify.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -46,8 +43,6 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
     });
 
     const text = response.text || "";
-    
-    // Extração de fontes de fundamentação (Grounding)
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources: GroundingSource[] = groundingChunks
       .filter((chunk: any) => chunk.web)
@@ -56,7 +51,6 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
         uri: chunk.web.uri
       }));
 
-    // Limpeza da resposta para garantir que pegamos apenas o bloco JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     let matches: Match[] = [];
     
@@ -65,16 +59,19 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
         const parsed = JSON.parse(jsonMatch[0]);
         matches = (parsed.matches || []).map((m: any) => ({
           ...m,
+          id: m.id || Math.random().toString(36).substr(2, 9),
           status: m.status || 'SCHEDULED'
         }));
       } catch (e) {
-        console.error("Erro ao processar JSON da IA:", e);
+        console.error("Erro no JSON:", e);
       }
     }
 
     return { matches, sources };
   } catch (error: any) {
-    console.error("Erro na chamada Gemini:", error);
+    if (error.message?.includes("429")) {
+      throw new Error("LIMITE DA API ATINGIDO (Erro 429). A chave configurada no Netlify excedeu a cota gratuita do Google AI Studio.");
+    }
     throw error;
   }
 };
