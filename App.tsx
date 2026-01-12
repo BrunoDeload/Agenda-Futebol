@@ -80,7 +80,7 @@ const App: React.FC = () => {
             <div className="text-center md:text-left">
               <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-none mb-1">DALE JOGOS</h1>
               <p className="text-sm text-slate-400 font-medium tracking-wide">
-                Criado por <span className="text-orange-500 font-bold uppercase underline decoration-orange-500/30 underline-offset-4">Bruno Eduardo</span>
+                Criado por <span className="text-orange-500 font-bold uppercase underline decoration-orange-500/30 underline-offset-4">Bruno e Leandro</span>
               </p>
             </div>
           </div>
