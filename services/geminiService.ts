@@ -1,12 +1,12 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
 export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
+  // O Vite injeta process.env.API_KEY conforme definido no vite.config.ts
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
-    throw new Error("API_KEY não configurada. Adicione a variável de ambiente no Netlify.");
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API_KEY não encontrada. Certifique-se de configurar a variável de ambiente API_KEY no painel da Netlify.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -22,9 +22,9 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
     REGRAS: 
     - Busque jogos agendados para os próximos 90 dias.
     - Ignore Paulistão A2.
-    - O campo 'dateTime' deve estar no formato ISO 8601 UTC.
+    - O campo 'dateTime' deve estar no formato ISO 8601 UTC (ex: 2024-05-20T20:00:00Z).
     
-    RETORNE APENAS JSON:
+    RETORNE APENAS JSON PURO:
     {
       "matches": [
         {
@@ -72,7 +72,7 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
           status: 'SCHEDULED'
         }));
       } catch (e) {
-        console.error("Erro ao processar JSON do Gemini:", e);
+        console.error("Erro ao converter JSON do Gemini:", e);
       }
     }
 
@@ -80,8 +80,9 @@ export const fetchFootballMatches = async (): Promise<MatchDataResponse> => {
       matches: parsedMatches,
       sources: sources
     };
-  } catch (error) {
-    console.error("Erro na busca de jogos via Gemini:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Erro na API Gemini:", error);
+    if (error.message?.includes("API_KEY")) throw error;
+    throw new Error("Falha ao buscar jogos. Verifique sua conexão ou a cota da API.");
   }
 };
