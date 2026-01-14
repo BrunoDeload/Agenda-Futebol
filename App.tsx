@@ -2,23 +2,30 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { fetchFootballMatches } from './services/geminiService';
 import { Match, GroundingSource } from './types';
 import MatchCard from './components/MatchCard';
-import { Trophy, RefreshCw, Loader2, Info, Database, WifiOff, Zap } from 'lucide-react';
+import { Trophy, RefreshCw, Loader2, Info, Database, Zap, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
   const [sources, setSources] = useState<GroundingSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sourceType, setSourceType] = useState<'api' | 'cache' | 'offline'>('api');
+  const [error, setError] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<'api' | 'cache'>('api');
 
   const loadData = async (force = false) => {
     setLoading(true);
+    setError(null);
     try {
       const result = await fetchFootballMatches(force);
       setMatches(result.matches || []);
       setSources(result.sources || []);
       setSourceType(result.dataSource);
     } catch (err: any) {
-      setSourceType('offline');
+      console.error(err);
+      setError(
+        err.message?.includes("429") 
+        ? "Limite de requisições excedido. Tente novamente em instantes." 
+        : "Não foi possível carregar os jogos. Verifique sua conexão."
+      );
     } finally {
       setLoading(false);
     }
@@ -47,21 +54,19 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-black text-white uppercase tracking-tighter leading-none">DALE JOGOS</h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Dash por Bruno & Leandro</span>
-                {sourceType === 'api' && (
-                  <span className="flex items-center gap-1 text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20 uppercase font-black">
-                    <Zap className="w-2 h-2" /> Live
-                  </span>
-                )}
-                {sourceType === 'cache' && (
-                  <span className="flex items-center gap-1 text-[8px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
-                    <Database className="w-2 h-2" /> Local
-                  </span>
-                )}
-                {sourceType === 'offline' && (
-                  <span className="flex items-center gap-1 text-[8px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 uppercase font-black">
-                    <WifiOff className="w-2 h-2" /> Demo
-                  </span>
+                <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Bruno & Leandro</span>
+                {!loading && !error && (
+                  <>
+                    {sourceType === 'api' ? (
+                      <span className="flex items-center gap-1 text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20 uppercase font-black">
+                        <Zap className="w-2 h-2 fill-current" /> Live
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[8px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
+                        <Database className="w-2 h-2" /> Cache
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -79,18 +84,19 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {sourceType === 'offline' && (
-          <div className="bg-amber-500/5 border border-amber-500/10 p-3 rounded-xl flex items-center gap-3 mb-8">
-            <Info className="w-4 h-4 text-amber-500" />
-            <p className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wider">
-              Cota da API excedida. Exibindo dados de pré-visualização. Tente atualizar em alguns minutos.
-            </p>
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3 mb-8">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <div>
+              <p className="text-xs text-red-400 font-black uppercase tracking-wider">Erro de Conexão</p>
+              <p className="text-xs text-red-500/80">{error}</p>
+            </div>
           </div>
         )}
 
         <div className="flex items-center gap-3 mb-8">
           <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
-          <h2 className="text-lg font-black text-white uppercase tracking-tight">Próximos Confrontos</h2>
+          <h2 className="text-lg font-black text-white uppercase tracking-tight">Agenda de Partidas</h2>
         </div>
 
         {loading && matches.length === 0 ? (
@@ -99,17 +105,22 @@ const App: React.FC = () => {
               <div key={i} className="h-48 bg-slate-900/40 rounded-2xl animate-pulse border border-white/5"></div>
             ))}
           </div>
-        ) : (
+        ) : matches.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sortedMatches.map((match) => (
               <MatchCard key={match.id} match={match} />
             ))}
           </div>
+        ) : !loading && (
+          <div className="text-center py-20 bg-slate-900/20 rounded-3xl border border-dashed border-white/5">
+            <Info className="w-10 h-10 text-slate-700 mx-auto mb-4" />
+            <p className="text-slate-500 font-bold uppercase text-xs">Nenhum jogo encontrado no momento.</p>
+          </div>
         )}
 
-        {sources.length > 0 && sourceType !== 'offline' && (
+        {sources.length > 0 && (
           <div className="mt-16 pt-8 border-t border-white/5">
-            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Referências</p>
+            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Fontes de Dados</p>
             <div className="flex flex-wrap gap-2">
               {sources.map((s, i) => (
                 <a key={i} href={s.uri} target="_blank" rel="noreferrer" className="text-[9px] bg-slate-900 px-3 py-1.5 rounded-lg text-slate-500 hover:text-orange-500 transition-colors border border-white/5">

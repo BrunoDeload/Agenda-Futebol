@@ -2,75 +2,27 @@ import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
 const CACHE_KEY = 'dale_jogos_v3_cache';
-const CACHE_TIME = 12 * 60 * 60 * 1000; // 12 horas de cache
+const CACHE_TIME = 6 * 60 * 60 * 1000; // 6 horas de cache para otimização
 
-const OFFLINE_DATA: MatchDataResponse = {
-  matches: [
-    {
-      id: "off-1",
-      homeTeam: "Corinthians",
-      awayTeam: "Palmeiras",
-      league: "Campeonato Paulista",
-      dateTime: new Date(Date.now() + 86400000 * 1).toISOString(),
-      status: "SCHEDULED",
-      venue: "Neo Química Arena"
-    },
-    {
-      id: "off-2",
-      homeTeam: "São Paulo",
-      awayTeam: "RB Bragantino",
-      league: "Campeonato Paulista",
-      dateTime: new Date(Date.now() + 86400000 * 2).toISOString(),
-      status: "SCHEDULED",
-      venue: "MorumBIS"
-    },
-    {
-      id: "off-3",
-      homeTeam: "Santos",
-      awayTeam: "Mirassol",
-      league: "Paulistão Série A2",
-      dateTime: new Date(Date.now() + 86400000 * 3).toISOString(),
-      status: "SCHEDULED",
-      venue: "Vila Belmiro"
-    },
-    {
-      id: "off-4",
-      homeTeam: "Brasil",
-      awayTeam: "Colômbia",
-      league: "Eliminatórias",
-      dateTime: new Date(Date.now() + 86400000 * 15).toISOString(),
-      status: "SCHEDULED",
-      venue: "Arena Fonte Nova"
-    },
-    {
-      id: "off-5",
-      homeTeam: "Ponte Preta",
-      awayTeam: "Guarani",
-      league: "Série B",
-      dateTime: new Date(Date.now() + 86400000 * 5).toISOString(),
-      status: "SCHEDULED",
-      venue: "Moisés Lucarelli"
-    }
-  ],
-  sources: [
-    { title: "Modo de Demonstração (Dados Locais)", uri: "#" }
-  ]
-};
-
-export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchDataResponse & { dataSource: 'api' | 'cache' | 'offline' }> => {
+export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchDataResponse & { dataSource: 'api' | 'cache' }> => {
+  // 1. Tentar Cache primeiro se não for refresh forçado
   if (!forceRefresh) {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < CACHE_TIME) {
-        return { ...data, dataSource: 'cache' };
+      try {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_TIME) {
+          return { ...data, dataSource: 'cache' };
+        }
+      } catch (e) {
+        localStorage.removeItem(CACHE_KEY);
       }
     }
   }
 
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === "undefined") {
-    return { ...OFFLINE_DATA, dataSource: 'offline' };
+    throw new Error("Chave de API não configurada.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -78,7 +30,7 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchD
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "Liste 6 próximos jogos de Corinthians, Palmeiras, SPFC, Santos e Seleção Brasileira em 2024/2025. Retorne APENAS um JSON com array 'matches' contendo: id, homeTeam, awayTeam, league, dateTime (ISO), status, venue.",
+      contents: "Liste os próximos 8 jogos (data, hora, local, campeonato) de: Corinthians, Palmeiras, São Paulo, Santos, RB Bragantino e Seleção Brasileira. Retorne APENAS um JSON válido com o campo 'matches' contendo objetos com: id (string única), homeTeam, awayTeam, league, dateTime (ISO 8601), status ('SCHEDULED'), venue.",
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json"
@@ -92,9 +44,13 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchD
       const parsed = JSON.parse(text);
       matches = parsed.matches || [];
     } catch (e) {
-      console.error("Erro ao parsear JSON da API");
+      // Fallback para extração manual se o JSON vier com markdown
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) matches = JSON.parse(jsonMatch[0]).matches || [];
+      if (jsonMatch) {
+        matches = JSON.parse(jsonMatch[0]).matches || [];
+      } else {
+        throw new Error("Formato de resposta inválido.");
+      }
     }
 
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -106,16 +62,25 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<MatchD
       }));
 
     const result = { matches, sources };
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
+    
+    // Salva no cache apenas se houver sucesso
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ 
+      data: result, 
+      timestamp: Date.now() 
+    }));
+
     return { ...result, dataSource: 'api' };
 
   } catch (error: any) {
-    console.warn("API 429 ou erro de rede. Usando fallback.");
+    console.error("Erro na busca da API:", error);
+    
+    // Se a API falhar e tivermos um cache (mesmo antigo), usamos ele como última esperança
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
       const { data } = JSON.parse(cached);
       return { ...data, dataSource: 'cache' };
     }
-    return { ...OFFLINE_DATA, dataSource: 'offline' };
+    
+    throw error; // Repassa o erro se não houver nenhuma forma de exibir dados
   }
 };
