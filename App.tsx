@@ -20,12 +20,16 @@ const App: React.FC = () => {
       setSources(result.sources || []);
       setSourceType(result.dataSource);
     } catch (err: any) {
-      console.error(err);
-      setError(
-        err.message?.includes("429") 
-        ? "Limite de requisições excedido. Tente novamente em instantes." 
-        : "Não foi possível carregar os jogos. Verifique sua conexão."
-      );
+      console.error("Erro capturado no App:", err);
+      // Exibir a mensagem real do erro para ajudar no debug
+      const errorMsg = err.message || "Erro desconhecido";
+      if (errorMsg.includes("429")) {
+        setError("Limite de requisições excedido. Tente novamente em alguns minutos.");
+      } else if (errorMsg.includes("API_KEY") || errorMsg.includes("Chave")) {
+        setError("Chave de API não encontrada ou inválida. Verifique as variáveis de ambiente.");
+      } else {
+        setError(`Erro na API: ${errorMsg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -85,12 +89,18 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3 mb-8">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
             <div>
-              <p className="text-xs text-red-400 font-black uppercase tracking-wider">Erro de Conexão</p>
-              <p className="text-xs text-red-500/80">{error}</p>
+              <p className="text-xs text-red-400 font-black uppercase tracking-wider">Falha na Sincronização</p>
+              <p className="text-xs text-red-500/80 mt-0.5">{error}</p>
             </div>
+            <button 
+              onClick={() => loadData(true)}
+              className="ml-auto text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-500 px-3 py-1 rounded-md font-bold uppercase"
+            >
+              Tentar Novamente
+            </button>
           </div>
         )}
 
@@ -120,7 +130,7 @@ const App: React.FC = () => {
 
         {sources.length > 0 && (
           <div className="mt-16 pt-8 border-t border-white/5">
-            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Fontes de Dados</p>
+            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Fontes de Dados (Grounding)</p>
             <div className="flex flex-wrap gap-2">
               {sources.map((s, i) => (
                 <a key={i} href={s.uri} target="_blank" rel="noreferrer" className="text-[9px] bg-slate-900 px-3 py-1.5 rounded-lg text-slate-500 hover:text-orange-500 transition-colors border border-white/5">
