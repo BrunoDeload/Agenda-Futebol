@@ -20,15 +20,14 @@ const App: React.FC = () => {
       setSources(result.sources || []);
       setSourceType(result.dataSource);
     } catch (err: any) {
-      console.error("Erro capturado no App:", err);
-      // Exibir a mensagem real do erro para ajudar no debug
+      console.error("Erro capturado:", err);
       const errorMsg = err.message || "Erro desconhecido";
       if (errorMsg.includes("429")) {
-        setError("Limite de requisições excedido. Tente novamente em alguns minutos.");
-      } else if (errorMsg.includes("API_KEY") || errorMsg.includes("Chave")) {
-        setError("Chave de API não encontrada ou inválida. Verifique as variáveis de ambiente.");
+        setError("O Google limitou as requisições (Erro 429). Isso acontece na versão gratuita se atualizar muitas vezes seguidas. Aguarde 1 minuto.");
+      } else if (errorMsg.includes("API_KEY")) {
+        setError("Configuração incompleta: API_KEY não encontrada no Netlify.");
       } else {
-        setError(`Erro na API: ${errorMsg}`);
+        setError(`Ops! ${errorMsg}`);
       }
     } finally {
       setLoading(false);
@@ -59,18 +58,14 @@ const App: React.FC = () => {
               <h1 className="text-xl font-black text-white uppercase tracking-tighter leading-none">DALE JOGOS</h1>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Bruno & Leandro</span>
-                {!loading && !error && (
-                  <>
-                    {sourceType === 'api' ? (
-                      <span className="flex items-center gap-1 text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20 uppercase font-black">
-                        <Zap className="w-2 h-2 fill-current" /> Live
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[8px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 uppercase font-black">
-                        <Database className="w-2 h-2" /> Cache
-                      </span>
-                    )}
-                  </>
+                {!loading && (
+                  <span className={`flex items-center gap-1 text-[8px] px-2 py-0.5 rounded-full border uppercase font-black ${
+                    sourceType === 'api' 
+                    ? 'bg-green-500/10 text-green-400 border-green-500/20' 
+                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  }`}>
+                    {sourceType === 'api' ? <><Zap className="w-2 h-2 fill-current" /> Ao Vivo</> : <><Database className="w-2 h-2" /> Cache</>}
+                  </span>
                 )}
               </div>
             </div>
@@ -82,31 +77,28 @@ const App: React.FC = () => {
             className="flex items-center gap-2 bg-slate-900 border border-white/10 hover:border-orange-500/50 text-white px-5 py-2 rounded-full transition-all font-bold text-[10px] tracking-widest uppercase disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            {loading ? 'Sincronizando...' : 'Atualizar'}
+            {loading ? 'Sincronizando...' : 'Atualizar Dados'}
           </button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-            <div>
+          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-start gap-3 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
               <p className="text-xs text-red-400 font-black uppercase tracking-wider">Falha na Sincronização</p>
-              <p className="text-xs text-red-500/80 mt-0.5">{error}</p>
+              <p className="text-xs text-red-500/80 mt-1 leading-relaxed">{error}</p>
             </div>
-            <button 
-              onClick={() => loadData(true)}
-              className="ml-auto text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-500 px-3 py-1 rounded-md font-bold uppercase"
-            >
-              Tentar Novamente
-            </button>
           </div>
         )}
 
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
-          <h2 className="text-lg font-black text-white uppercase tracking-tight">Agenda de Partidas</h2>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
+            <h2 className="text-lg font-black text-white uppercase tracking-tight">Próximas Partidas</h2>
+          </div>
+          <p className="text-[10px] text-slate-500 font-medium">Brasileirão, Paulistão e mais</p>
         </div>
 
         {loading && matches.length === 0 ? (
@@ -124,13 +116,13 @@ const App: React.FC = () => {
         ) : !loading && (
           <div className="text-center py-20 bg-slate-900/20 rounded-3xl border border-dashed border-white/5">
             <Info className="w-10 h-10 text-slate-700 mx-auto mb-4" />
-            <p className="text-slate-500 font-bold uppercase text-xs">Nenhum jogo encontrado no momento.</p>
+            <p className="text-slate-500 font-bold uppercase text-xs">Nenhum jogo encontrado. Tente atualizar.</p>
           </div>
         )}
 
         {sources.length > 0 && (
           <div className="mt-16 pt-8 border-t border-white/5">
-            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Fontes de Dados (Grounding)</p>
+            <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-4">Fontes oficiais e notícias</p>
             <div className="flex flex-wrap gap-2">
               {sources.map((s, i) => (
                 <a key={i} href={s.uri} target="_blank" rel="noreferrer" className="text-[9px] bg-slate-900 px-3 py-1.5 rounded-lg text-slate-500 hover:text-orange-500 transition-colors border border-white/5">
