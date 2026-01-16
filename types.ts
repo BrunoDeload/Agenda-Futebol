@@ -1,4 +1,3 @@
-
 export interface Match {
   id: string;
   homeTeam: string;
@@ -6,6 +5,7 @@ export interface Match {
   league: string;
   dateTime: string;
   status: 'LIVE' | 'SCHEDULED' | 'FINISHED';
+  prediction?: string;
   score?: {
     home: number;
     away: number;
