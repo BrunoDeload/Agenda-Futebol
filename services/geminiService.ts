@@ -1,13 +1,38 @@
 import { GoogleGenAI } from "@google/genai";
 import { Match, MatchDataResponse, GroundingSource } from "../types";
 
-const CACHE_KEY = 'dale_jogos_premium_v4';
-const CACHE_TIME = 6 * 60 * 60 * 1000; // 6 horas
+const CACHE_KEY = 'dale_jogos_premium_v5';
+const CACHE_TIME = 8 * 60 * 60 * 1000; // 8 horas de validade
+
+// Dados de demonstração caso o primeiro acesso sofra 429
+const STATIC_FALLBACK: Match[] = [
+  {
+    id: 'demo-1',
+    homeTeam: 'Corinthians',
+    awayTeam: 'Palmeiras',
+    league: 'Brasileirão',
+    dateTime: new Date(Date.now() + 86400000).toISOString(),
+    status: 'SCHEDULED',
+    prediction: 'Derby tenso com favoritismo equilibrado.',
+    venue: 'Neo Química Arena'
+  },
+  {
+    id: 'demo-2',
+    homeTeam: 'São Paulo',
+    awayTeam: 'Santos',
+    league: 'Paulistão',
+    dateTime: new Date(Date.now() + 172800000).toISOString(),
+    status: 'SCHEDULED',
+    prediction: 'San-São decisivo para a classificação.',
+    venue: 'MorumBIS'
+  }
+];
 
 export interface EnhancedMatchResponse extends MatchDataResponse {
-  dataSource: 'api' | 'cache';
+  dataSource: 'api' | 'cache' | 'fallback';
   error?: string;
   isRateLimited?: boolean;
+  lastUpdated?: number;
 }
 
 export const fetchFootballMatches = async (forceRefresh = false): Promise<EnhancedMatchResponse> => {
@@ -25,15 +50,15 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<Enhanc
     }
   }
 
-  // Se não for forçado e o cache for recente, usa ele
+  // Lógica de cache inteligente
   if (!forceRefresh && cachedData && (Date.now() - lastTimestamp < CACHE_TIME)) {
-    return { ...cachedData, dataSource: 'cache' };
+    return { ...cachedData, dataSource: 'cache', lastUpdated: lastTimestamp };
   }
 
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    if (cachedData) return { ...cachedData, dataSource: 'cache', error: "Modo Offline (API_KEY ausente)" };
-    throw new Error("API_KEY não configurada.");
+  if (!apiKey || apiKey === "undefined") {
+    if (cachedData) return { ...cachedData, dataSource: 'cache', error: "API_KEY não configurada.", lastUpdated: lastTimestamp };
+    return { matches: STATIC_FALLBACK, sources: [], dataSource: 'fallback', error: "Configure a API_KEY no Netlify." };
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -41,7 +66,7 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<Enhanc
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "Aja como um analista de dados esportivos. Liste os próximos 20 jogos importantes de futebol (data, hora, local, campeonato) do Brasileirão (Séries A e B), Paulistão, Libertadores, Sulamericana, Copa do Brasil e Champions League. Priorize times de São Paulo. Retorne APENAS um JSON puro com o campo 'matches' contendo: id (string uuid), homeTeam, awayTeam, league, dateTime (ISO 8601), status (SCHEDULED ou LIVE), venue. Inclua também uma breve 'prediction' (string curta) para cada jogo.",
+      contents: "Aja como um analista de dados esportivos experiente. Liste os próximos 20 jogos mais importantes de futebol (data, hora, local, campeonato) do Brasileirão, Paulistão, Libertadores e Copa do Brasil. Priorize os grandes de SP (Corinthians, Palmeiras, São Paulo, Santos). Retorne APENAS um JSON puro com o campo 'matches' contendo: id (string uuid), homeTeam, awayTeam, league, dateTime (ISO 8601), status (SCHEDULED ou LIVE), venue. Adicione uma 'prediction' de 1 frase para cada.",
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json"
@@ -65,21 +90,32 @@ export const fetchFootballMatches = async (forceRefresh = false): Promise<Enhanc
       .map((chunk: any) => ({ title: chunk.web.title, uri: chunk.web.uri }));
 
     const result = { matches, sources };
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() }));
+    const now = Date.now();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: now }));
 
-    return { ...result, dataSource: 'api' };
+    return { ...result, dataSource: 'api', lastUpdated: now };
 
   } catch (error: any) {
-    const isRateLimit = JSON.stringify(error).includes("429");
+    const errorStr = JSON.stringify(error);
+    const isRateLimit = errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED");
     
     if (cachedData) {
       return { 
         ...cachedData, 
         dataSource: 'cache', 
         isRateLimited: isRateLimit,
-        error: isRateLimit ? "Limite do Google atingido. Usando dados salvos." : "Falha na conexão."
+        lastUpdated: lastTimestamp,
+        error: isRateLimit ? "Cota excedida. Exibindo última atualização salva." : "Erro de conexão."
       };
     }
-    throw error;
+    
+    // Se não tem cache, usa o fallback estático para não quebrar a UI
+    return { 
+      matches: STATIC_FALLBACK, 
+      sources: [], 
+      dataSource: 'fallback', 
+      isRateLimited: isRateLimit,
+      error: "O Google limitou as requisições e não temos dados salvos. Exibindo partidas de exemplo." 
+    };
   }
 };
